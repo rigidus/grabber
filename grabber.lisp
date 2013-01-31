@@ -31,9 +31,32 @@
         (error 'non-200-status-error :text (format nil "~A : ~A" number status-code))
         (funcall fun body-or-stream))))
 
+(defun sanitize ($string)
+  (cond ((vectorp $string) (let (($ret nil))
+							 (loop
+								for x across $string collect x
+								do (if (not
+										(or
+                                         (equal x #\[)
+                                         (equal x #\])
+                                         (equal x #\{)
+                                         (equal x #\})
+										 (equal x #\')
+										 (equal x #\")
+										 (equal x #\!)
+										 (equal x #\%)
+										 (equal x #\\)
+										 (equal x #\/)
+										 ))
+									   (push x $ret)))
+							 (coerce (reverse $ret) 'string)))
+		((listp $string)   (if (null $string)
+							   ""
+							   $string))))
+
 (defun download (number)
   (let* ((link  (get-page number #'get-link))
-         (fname (car (last (puri:uri-parsed-path (puri:parse-uri link))))))
+         (fname (sanitize (car (last (puri:uri-parsed-path (puri:parse-uri link)))))))
     (multiple-value-bind (body-or-stream status-code headers uri stream-out must-close reason-phrase)
         (drakma:http-request (get-page number #'get-link))
       (values
