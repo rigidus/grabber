@@ -6,9 +6,9 @@
 (require 'drakma)
 (require 'hunchentoot)
 (require 'cl-json)
+(require 'babel)
+(load #P"puri-unicode.lisp")
 
-
-(defparameter *key* "AIzaSyDXNN-OfxFCBbo6owLD7SsJ7UiU9nxGLE8")
 (defparameter *user-agent* "Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.13) Gecko/20101206 Ubuntu/10.04 (lucid) Firefox/3.6.13")
 
 (define-condition non-200-status-error (error)
@@ -16,6 +16,13 @@
 
 (define-condition non-download-link-error (error)
   ((text :initarg :text :reader text)))
+
+
+(defmacro bprint (var)
+  `(subseq (with-output-to-string (*standard-output*)  (pprint ,var)) 1))
+
+(defmacro err (var)
+  `(error (format nil "ERR:[~A]" (bprint ,var))))
 
 
 (defun get-link (body)
@@ -37,6 +44,8 @@
 								for x across $string collect x
 								do (if (not
 										(or
+                                         (equal x #\()
+                                         (equal x #\))
                                          (equal x #\[)
                                          (equal x #\])
                                          (equal x #\{)
@@ -66,6 +75,7 @@
 (defun save (number)
   (multiple-value-bind (fname fdata)
       (download number)
+    (format t "~A: ~A~%" number fname)
     (let ((stream-type (cadr (type-of fdata))))
       (with-open-file (stream (pathname (format nil "./files/~A" fname))
                               :element-type stream-type
@@ -78,14 +88,13 @@
 ;;   (cadr (type-of fdata)))
 
 (defun rghost(start end)
-  (print 'rghost)
+  (format t "=RGHOST=~%")
   (do ((i start))
       ((< i end))
-    (print i)
     (handler-case
         (save i)
-      (non-200-status-error (se)    (print (list se (text se))))
-      (non-download-link-error (se) (print (list se (text se)))))
+      (non-200-status-error (se)    (format t "~A: ~A~%" (bprint se) (text se)))
+      (non-download-link-error (se) (format t "~A: ~A: ~A~%" (bprint se) i (text se))))
     (decf i))
   (print 'fin))
 
