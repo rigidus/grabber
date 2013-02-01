@@ -13,7 +13,7 @@
 (defparameter *user-agent* "Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.13) Gecko/20101206 Ubuntu/10.04 (lucid) Firefox/3.6.13")
 (defparameter *strategy* nil)
 
-(defconstant +many-files+ 3)
+(defconstant +many-files+ 999999)
 (define-condition to-many-files-error (error)
   ((text :initarg :text :reader text)))
 
@@ -22,6 +22,10 @@
 
 (define-condition non-download-link-error (error)
   ((text :initarg :text :reader text)))
+
+(define-condition filtered-by-name-error (error)
+  ((text :initarg :text :reader text)))
+
 
 (define-condition file-exists-error (error)
   ((text :initarg :text :reader text))
@@ -46,7 +50,7 @@
            (push x ret)))
        (coerce (reverse ret) 'string))))
 
-(make-sanitize "()[]{}'\"!%\/")
+(make-sanitize "()[]{}'\"!%\/&")
 
 
 
@@ -63,11 +67,15 @@
         (error 'non-200-status-error :text (format nil "~A : ~A" number status-code))
         (funcall fun body-or-stream))))
 
+(defun rghost-filter-by-name (fname)
+  (or
+   (ppcre:scan "(?i)(.*)sa(.*)\\.jpg" fname)))
 
-
-(defun download (number)
+(defun download (number filter)
   (let* ((link  (get-page number #'get-link))
-         (fname (sanitize (car (last (puri:uri-parsed-path (puri:parse-uri link)))))))
+         (fname (sanitize (format nil "~A" (car (last (puri:uri-parsed-path (puri:parse-uri link))))))))
+    (when (funcall filter fname)
+      (error 'filtered-by-name-error :text fname))
     (multiple-value-bind (body-or-stream status-code headers uri stream-out must-close reason-phrase)
         (drakma:http-request (get-page number #'get-link))
       (values
@@ -127,7 +135,7 @@
 
 (defun save (number)
   (multiple-value-bind (fname fdata)
-      (download number)
+      (download number #'rghost-filter-by-name)
     (setf fname (safe-fname fname))
     (format t "~A: ~A~%" number fname)
     (let ((stream-type (cadr (type-of fdata))))
@@ -135,7 +143,6 @@
                               :element-type stream-type
                               :direction :output
                               :if-exists :supersede)
-        (format t "Write to '~A' ~%" fname)
         (write-sequence fdata stream)))))
 
 
@@ -152,7 +159,8 @@
       (handler-case
           (save i)
         (non-200-status-error (se)    (format t "~A: ~A~%" (bprint se) (text se)))
-        (non-download-link-error (se) (format t "~A: ~A: ~A~%" (bprint se) i (text se)))))
+        (non-download-link-error (se) (format t "~A: ~A: ~A~%" (bprint se) i (text se)))
+        (filtered-by-name-error (se)  (format t "~A: ~A: ~A~%" (bprint se) i (text se)))))
     (decf i))
   (print 'fin))
 
