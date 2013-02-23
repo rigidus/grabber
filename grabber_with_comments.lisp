@@ -52,6 +52,7 @@
      (format stream "Extended-char in file content"
              (text condition)))))
 ;; extended-char-error - ошибка, файл содержит нестандартные символы
+;; вывод сообщения об этом
 
 (define-condition unknown-content-type-error (error)
   ((text :initarg :text :reader text))
@@ -62,6 +63,7 @@
 
 (defmacro bprint (var)
   `(subseq (with-output-to-string (*standard-output*)  (pprint ,var)) 1))
+;; bprint - макрос, который позволяет напечатаь строку без перехода на новую строку
 
 (defmacro err (var)
   `(error (format nil "ERR:[~A]" (bprint ,var))))
