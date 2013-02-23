@@ -16,11 +16,12 @@
 (defparameter *hashes* (make-hash-table :test #'equal))
 
 (defconstant +many-files+ 999999)
+
 (define-condition to-many-files-error (error)
   ((text :initarg :text :reader text)))
 
 (define-condition non-200-status-error (error)
-    ((text :initarg :text :reader text)))
+  ((text :initarg :text :reader text)))
 
 (define-condition non-download-link-error (error)
   ((text :initarg :text :reader text)))
@@ -33,12 +34,17 @@
   (:report (lambda (condition stream)
              (format stream "File '~A' exists!" (text condition)))))
 
+(define-condition extended-char-error (error)
+  ((text :initarg :text :reader text))
+  (:report
+   (lambda (condition stream)
+     (format stream "Extended-char in file content"
+             (text condition)))))
+
 (define-condition unknown-content-type-error (error)
   ((text :initarg :text :reader text))
   (:report (lambda (condition stream)
-             (format stream "Unlnown type of file content in function save data" (text condition)))))
-
-
+             (format stream "Unknown type of file content in function save data" (text condition)))))
 
 (defmacro bprint (var)
   `(subseq (with-output-to-string (*standard-output*)  (pprint ,var)) 1))
@@ -57,8 +63,6 @@
        (coerce (reverse ret) 'string))))
 
 (make-sanitize "()[]{}'\"!%\/&")
-
-
 
 (defun get-link (body)
   (let ((start (search "http://rghost.net/download/" body)))
@@ -140,15 +144,19 @@
           (setf name (find-rename-num name)))))
     name))
 
-
 (defun save (number)
   (multiple-value-bind (name data)
       (download number #'rghost-filter-by-name)
     (let* ((new-name (safe-name name))
            (stream-type (cadr (type-of data)))
-           (new-data (cond ((equal stream-type 'character) (ironclad:ascii-string-to-byte-array data))
-                           ((equal stream-type '(unsigned-byte 8)) data)
-                           (t (error 'unknown-content-type-error :text stream-type))))
+           (new-data
+            (cond ((equal stream-type 'character)
+                     (handler-case (ironclad:ascii-string-to-byte-array data)
+                       (simple-error () (format t "~A: ~A"
+                                                (error 'extended-char-error :text name)
+                                                name))))
+                  ((equal stream-type '(unsigned-byte 8)) data)
+                  (t (error 'unknown-content-type-error :text stream-type))))
            (hash-str (ironclad:byte-array-to-hex-string (ironclad:digest-sequence :md5 new-data))))
       (format t "~A:~A: ~A~%" number hash-str new-name)
       (with-open-file (stream (pathname (format nil "./files/~A" new-name))
@@ -156,7 +164,6 @@
                               :direction :output
                               :if-exists :supersede)
         (write-sequence data stream)))))
-
 
 (defun rghost(start end)
   (do ((i start))
@@ -172,8 +179,10 @@
           (save i)
         (non-200-status-error (se)    (format t "~A: ~A~%" (bprint se) (text se)))
         (non-download-link-error (se) (format t "~A: ~A: ~A~%" (bprint se) i (text se)))
-        (filtered-by-name-error (se)  (format t "~A: ~A: ~A~%" (bprint se) i (text se)))))
+        (filtered-by-name-error (se)  (format t "~A: ~A: ~A~%" (bprint se) i (text se)))
+        (extended-char-error (se)  (format t "~A: ~A: ~A~%" (bprint se) i (text se)))
+        ))
     (decf i))
   (print 'fin))
 
-(rghost 43450102 43450000)
+(rghost 43546555 43450000)
