@@ -19,7 +19,8 @@
 ;; *hashes* присваивается хеш таблица с ключом #'equal (функция сравнения)
 
 (defconstant +many-files+ 999999)
-;; глобальной константе +many-files+ присваивается значение 999999 (много файлов)
+;; глобальной константе +many-files+ присваивается значение 999999
+;; (число, соответствующее случаю, когда скачалось слишком много файлов)
 
 (define-condition to-many-files-error (error)
   ((text :initarg :text :reader text)))
@@ -67,6 +68,8 @@
 
 (defmacro err (var)
   `(error (format nil "ERR:[~A]" (bprint ,var))))
+;; err - макрос, который при обнаружении ошибки откроет отладчик, где
+;; будет напечатано "ERR:[переменная (ошибка)]"
 
 (defmacro make-sanitize (deprecated)
   `(defun sanitize (string)
@@ -77,14 +80,38 @@
                 `(equal x ,character))
            (push x ret)))
        (coerce (reverse ret) 'string))))
+;; make-sanitize - макрос, который раскрывается в определение функции sanitize
+;; sanitize - функция, её аргумент - строка
+;; задаётся локальная переменная ret и создаётся цикл - для каждого x в строке
+;; необходимо проверять, равен ли он символу из строки deprecated
+;; если равен, то этот символ добавляется в стопку (список) ret
+;; после проверки всех символов стопка (список) "зеркалится" и переводится в строку
 
 (make-sanitize "()[]{}'\"!%\/&")
+;; В данном случае макрос раскрывается в:
+;; => (DEFUN SANITIZE (STRING)
+;;      (LET ((RET))
+;;        (LOOP :FOR X :ACROSS STRING
+;;           :DO (OR (EQUAL X #\() (EQUAL X #\)) (EQUAL X #\[) (EQUAL X #\])
+;;                   (EQUAL X #\{) (EQUAL X #\}) (EQUAL X #\') (EQUAL X #\")
+;;                   (EQUAL X #\!) (EQUAL X #\%) (EQUAL X #\/) (EQUAL X #\&)
+;;                   (PUSH X RET)))
+;;        (COERCE (REVERSE RET) 'STRING))), T
 
 (defun get-link (body)
   (let ((start (search "http://rghost.net/download/" body)))
     (if (or (null start))
         (error 'non-download-link-error :text (format nil "password detected"))
         (subseq body start (search "\"" body :start2 start)))))
+;; get-link - функция, аргументом которой является body, то есть html файл
+;; страницы c файлом, который необходимо скачать
+;; эта функция должна выдавать ссылку на скачивание файла
+;; в начале небходимо найти место в файле, которое соответствует началу ссылки
+;; для этого выполняется (search "http://rghost.net/download/" body)
+;; если такое место не найдено, то будет выведено сообщение об ошибке -
+;; "password detected", и это означает, что для получения ссылки необходим пароль
+;; если start найден, копируется последовательность символов (строка) от start
+;; до первого символа "\"" - это и будет необходимая ссылка
 
 (defun get-page (number fun)
   (multiple-value-bind (data status-code)
@@ -171,7 +198,6 @@
                        (simple-error () (format t "~A: ~A"
                                                 (error 'extended-char-error :text name)
                                                 name))))
-                  ;; (error 'extended-char-error :text name)))
                   ((equal stream-type '(unsigned-byte 8)) data)
                   (t (error 'unknown-content-type-error :text stream-type))))
            (hash-str (ironclad:byte-array-to-hex-string (ironclad:digest-sequence :md5 new-data))))

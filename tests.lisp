@@ -55,3 +55,11 @@
 (handler-case (err)
   (to-many-files-error () (format t "~A" x)))
 
+;; Пример функции error
+
+(setq a 'fred)
+
+(if (numberp a) (1+ a) (error "~S is not a number." A))
+
+;; Так как а не number, происходит переброс в отладчик и выводится сообщение
+;; FRED is not a number.
