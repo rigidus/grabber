@@ -12,27 +12,39 @@
 
 
 (defparameter *user-agent* "Mozilla/5.0 (X11; U; Linux i686; ru; rv:1.9.2.13) Gecko/20101206 Ubuntu/10.04 (lucid) Firefox/3.6.13")
+;; задаётся клиент (браузер)
 (defparameter *strategy* nil)
+;; *strategy* присваивается значение nil
 (defparameter *hashes* (make-hash-table :test #'equal))
+;; *hashes* присваивается хеш таблица с ключом #'equal (функция сравнения)
 
 (defconstant +many-files+ 999999)
+;; глобальной константе +many-files+ присваивается значение 999999
+;; (число, соответствующее случаю, когда скачалось слишком много файлов)
 
 (define-condition to-many-files-error (error)
   ((text :initarg :text :reader text)))
+;; define-condition - макрос, определяющий ошибки
+;; to-many-files-error - ошибка, слишком много файлов (больше, чем 9999999)
 
 (define-condition non-200-status-error (error)
   ((text :initarg :text :reader text)))
+;; non-200-status-error - ошибка, сервер не открыл страницу
 
 (define-condition non-download-link-error (error)
   ((text :initarg :text :reader text)))
+;; non-download-link-error - ошибка, файл не загружается, т. к. есть пароль
 
 (define-condition filtered-by-name-error (error)
   ((text :initarg :text :reader text)))
+;; filtered-by-name-error - ошибка, файл не отсортирован по имени
 
 (define-condition file-exists-error (error)
   ((text :initarg :text :reader text))
   (:report (lambda (condition stream)
              (format stream "File '~A' exists!" (text condition)))))
+;; file-exists-error - ошибка, файл уже существует
+;; вывод сообщения об этом
 
 (define-condition extended-char-error (error)
   ((text :initarg :text :reader text))
@@ -40,17 +52,24 @@
    (lambda (condition stream)
      (format stream "Extended-char in file content"
              (text condition)))))
+;; extended-char-error - ошибка, файл содержит нестандартные символы
+;; вывод сообщения об этом
 
 (define-condition unknown-content-type-error (error)
   ((text :initarg :text :reader text))
   (:report (lambda (condition stream)
              (format stream "Unknown type of file content in function save data" (text condition)))))
+;; unknown-content-type-error - тип данных не известен
+;; вывод сообщения об этом
 
 (defmacro bprint (var)
   `(subseq (with-output-to-string (*standard-output*)  (pprint ,var)) 1))
+;; bprint - макрос, который позволяет напечатаь строку без перехода на новую строку
 
 (defmacro err (var)
   `(error (format nil "ERR:[~A]" (bprint ,var))))
+;; err - макрос, который при обнаружении ошибки откроет отладчик, где
+;; будет напечатано "ERR:[переменная (ошибка)]"
 
 (defmacro make-sanitize (deprecated)
   `(defun sanitize (string)
@@ -61,14 +80,38 @@
                 `(equal x ,character))
            (push x ret)))
        (coerce (reverse ret) 'string))))
+;; make-sanitize - макрос, который раскрывается в определение функции sanitize
+;; sanitize - функция, её аргумент - строка
+;; задаётся локальная переменная ret и создаётся цикл - для каждого x в строке
+;; необходимо проверять, равен ли он символу из строки deprecated
+;; если равен, то этот символ добавляется в стопку (список) ret
+;; после проверки всех символов стопка (список) "зеркалится" и переводится в строку
 
 (make-sanitize "()[]{}'\"!%\/&")
+;; В данном случае макрос раскрывается в:
+;; => (DEFUN SANITIZE (STRING)
+;;      (LET ((RET))
+;;        (LOOP :FOR X :ACROSS STRING
+;;           :DO (OR (EQUAL X #\() (EQUAL X #\)) (EQUAL X #\[) (EQUAL X #\])
+;;                   (EQUAL X #\{) (EQUAL X #\}) (EQUAL X #\') (EQUAL X #\")
+;;                   (EQUAL X #\!) (EQUAL X #\%) (EQUAL X #\/) (EQUAL X #\&)
+;;                   (PUSH X RET)))
+;;        (COERCE (REVERSE RET) 'STRING))), T
 
 (defun get-link (body)
   (let ((start (search "http://rghost.net/download/" body)))
     (if (or (null start))
         (error 'non-download-link-error :text (format nil "password detected"))
         (subseq body start (search "\"" body :start2 start)))))
+;; get-link - функция, аргументом которой является body, то есть html файл
+;; страницы c файлом, который необходимо скачать
+;; эта функция должна выдавать ссылку на скачивание файла
+;; в начале небходимо найти место в файле, которое соответствует началу ссылки
+;; для этого выполняется (search "http://rghost.net/download/" body)
+;; если такое место не найдено, то будет выведено сообщение об ошибке -
+;; "password detected", и это означает, что для получения ссылки необходим пароль
+;; если start найден, копируется последовательность символов (строка) от start
+;; до первого символа "\"" - это и будет необходимая ссылка
 
 (defun get-page (number fun)
   (multiple-value-bind (data status-code)
